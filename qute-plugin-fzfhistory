@@ -1,0 +1,156 @@
+#!/bin/bash
+# MADE by Twix. https://github.com/Twix53791/
+#=========================================================
+# To use this plugin, first apply the patch:
+#   ./apply-fzfhistory-patch.sh all <qutebrowser_src_dir>
+#
+# The patch modify two files in qutebrowser src:
+#   tabbedbrowser.py (for closed-tabs-history)
+#   history.py
+# To not patch tabbedbrowser.py and doesn't use
+# the closed-tabs extension of the plugin, run:
+#   ./apply-fzfhistory-path.sh history <qutebrowser_src_dir>
+#
+# Then to initialize the history-fzf plugin, run:
+#   ./qute-plugin-fzfhistory create
+#   ./qute-plugin-fzfhistory rebuild
+# It will create in the qutebrowser history database
+# history.sqlite a new table, HumanReadHistory, and copy the
+# already existing history to it.
+# This table is used now by qutebrower to store the history
+# whith a date in a human readable format.
+#=========================================================
+
+
+[[ -n $EDITOR ]] && editor=$EDITOR || editor="nano"
+
+#==== FILES ==============================================
+
+dbHistory="$QUTE_DATA_DIR/history.sqlite"
+filterlist="$QUTE_DATA_DIR/history-filters"
+closedtabs="$QUTE_DATA_DIR/closed-tabs-history"
+tmpfile="/tmp/qute-plugin-fzfhistory-tmp"
+
+#==== FUNCTIONS ==========================================
+# Colors
+# 34/93/35 ; 34/93/92 ; 34/33/35 ; 94/33/92
+# 36/34/32 ; 92/34/36
+C1="34m";C2="93m";C3="35m"
+
+table="HumanReadHistory"
+fields_order="human_time,title,url"
+sedpattern="s/^/\\\e[$C1/;s/|/\\\e[$C2  /;s/\(.*\)|/\1 \\\e[$C3| /"
+
+
+_build_list (){
+    sqlite3 $dbHistory "select $fields_order from $table order by last_atime asc" | sed "$sedpattern" > $tmpfile
+}
+
+_build_closedtabs_list (){
+    sed "$sedpattern" $closedtabs > $tmpfile
+}
+
+# Launch fzf from the file given as $1 argument
+_fzf_menu (){
+    helpmsg="ctrl-f: hide the url domain (add a new filter) ;  ctrl-e: edit filters list"
+
+    sedfilter="s/.*| //;s/.*\/\///;s/\/.*$//"
+
+    export FZF_DEFAULT_OPTS="--reverse --ansi -m \
+          --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
+          --bind 'ctrl-f:execute-silent(echo {} | sed \"$sedfilter\" >> $filterlist)+execute(echo :refresh)+abort' \
+          --bind 'ctrl-e:execute(echo :edit)+abort' \
+          --preview='echo -e {} | sed \"s/\(.*\)| /\1\n/\" | head -c 300; echo -e \"\\n$helpmsg\"' \
+          --preview-window='down,20%,wrap'"
+
+    # Filters with grep -v
+    filters="$(sed ':a;N;$!ba;s/\n/|/g' $filterlist)"
+
+    output=$(echo -e "$(tac $1)" | grep -Ev "$filters" | fzf)
+    [[ -z $output ]] && exit
+
+    # Refresh after ctrl + f
+    [[ $output == ":refresh" ]] && _fzf_menu "$@"
+
+    # Edit filters
+    if [[ $output == ":edit" ]]; then
+        $editor $filterlist
+        _fzf_menu "$@"
+    fi
+
+    # Get the urls
+    urlslist="$(while read line; do echo ${line##*| };done <<< $output)"
+
+    # Write the file used by history-fzf userscript to
+    #  send commands to qutebrowser
+    echo "$urlslist" > "$2"
+}
+
+_create_humanread_table (){
+    # Custom table history-fzf plugin use
+    hname="HumanReadHistory"
+
+    # Create table is not exists
+    fields="url TEXT PRIMARY KEY, title TEXT NOT NULL, last_atime INTEGER NOT NULL, human_time TEXT NOT NULL"
+    sqlite3 $dbHistory "create table if note exists $hname ($fields);"
+}
+
+_rebuild_humanread_table (){
+    cname="CompletionHistory"
+    ccols="url, title, last_atime"
+
+    # Store the content of CompletionHistory in a tmp file
+    sqlite3 $dbHistory "select $ccols from $cname" > /tmp/$cname
+
+    # Counter to build a progress bar
+    ntotal=$(wc -l /tmp/$cname)
+    onepercent=$(echo $((${ntotal%% *} / 100)))
+    i=0
+    p=0
+    echo "Total of rows in $cname : ${ntotal%% *}"
+    echo "==================================="
+    echo "$p % done"
+
+    while read line; do
+        # Progress view
+        if (($i % ($onepercent + 1) == 0 )); then
+            ((p++))
+            [[ $p -le 100 ]] && echo "$p % done"
+        fi
+
+        atime="${line##*|}"
+        txt="${line%|*}"
+        url="${txt%%|*}"
+        title="${txt#*|}"
+
+        htime="$(date '+%Y %B %d %H:%M:%S' -d @$atime)"
+
+        hcols="url, title, last_atime, human_time"
+        values="'${url//\'/\'\'}', '${title//\'/\'\'}', $atime, '$htime'"
+            # ' must be replaced by '' in sqlite. The field values must be single quoted.
+
+        sqlite3 $dbHistory "insert or ignore into $hname ($hcols) values ($values);"
+            # If the value already exist, it will be ignored
+
+        ((i++))
+    done < /tmp/$cname
+}
+
+#==== MAIN ===============================================
+_main (){
+    if [[ $1 == "closed-tabs" ]]; then
+        _build_closedtabs_list
+        _fzf_menu "$tmpfile" "$2"
+    elif [[ $1 == "create" ]]; then
+        _create_humanread_table
+    elif [[ $1 == "rebuild" ]]; then
+        _rebuild_humanread_table
+    else
+        _build_list
+        _fzf_menu "$tmpfile" "$2"
+    fi
+}
+
+# $1: mode ; $2: file path to communicate with qutebrowser (to send the fzf selection)
+_main "$@"
+
