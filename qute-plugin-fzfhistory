@@ -2,25 +2,21 @@
 # MADE by Twix. https://github.com/Twix53791/
 #=========================================================
 # To use this plugin, first apply the patch:
-#   ./apply-fzfhistory-patch.sh all <qutebrowser_src_dir>
+#   ./apply-fzfhistory-patch.sh
 #
 # The patch modify two files in qutebrowser src:
 #   tabbedbrowser.py (for closed-tabs-history)
 #   history.py
-# To not patch tabbedbrowser.py and doesn't use
-# the closed-tabs extension of the plugin, run:
-#   ./apply-fzfhistory-path.sh history <qutebrowser_src_dir>
+# and update the CompletionHistory table of the history.sqlite
+# database.
+# It preserves your history and just add the time in
+# a human readable format.
 #
-# Then to initialize the history-fzf plugin, run:
-#   ./qute-plugin-fzfhistory create
-#   ./qute-plugin-fzfhistory rebuild
-# It will create in the qutebrowser history database
-# history.sqlite a new table, HumanReadHistory, and copy the
-# already existing history to it.
-# This table is used now by qutebrower to store the history
-# whith a date in a human readable format.
+# NOTE: To not patch tabbedbrowser.py and doesn't use
+# the closed-tabs extension of the plugin, run:
+#   ./apply-fzfhistory-path.sh --only-history
+#
 #=========================================================
-
 
 [[ -n $EDITOR ]] && editor=$EDITOR || editor="nano"
 
@@ -32,41 +28,56 @@ closedtabs="$QUTE_DATA_DIR/closed-tabs-history"
 tmpfile="/tmp/qute-plugin-fzfhistory-tmp"
 
 #==== FUNCTIONS ==========================================
-# Colors
+# Colors displayed in fzf
 # 34/93/35 ; 34/93/92 ; 34/33/35 ; 94/33/92
 # 36/34/32 ; 92/34/36
 C1="34m";C2="93m";C3="35m"
 
-table="HumanReadHistory"
-fields_order="human_time,title,url"
+table="CompletionHistory"
+fields_order="human_time,title,url" # Set here the fields order displayed in fzf
 sedpattern="s/^/\\\e[$C1/;s/|/\\\e[$C2  /;s/\(.*\)|/\1 \\\e[$C3| /"
 
 
-_build_list (){
+# Build the file source of the fzf menu in 'history' mode
+_build_history_list (){
     sqlite3 $dbHistory "select $fields_order from $table order by last_atime asc" | sed "$sedpattern" > $tmpfile
 }
 
+# Build the file source of the fzf menu in 'close-tabs' mode
 _build_closedtabs_list (){
     sed "$sedpattern" $closedtabs > $tmpfile
 }
 
-# Launch fzf from the file given as $1 argument
+# Fzf menu. $1: mode ; $2: select file to send the picked urls to qutebrowser
 _fzf_menu (){
     helpmsg="ctrl-f: hide the url domain (add a new filter) ;  ctrl-e: edit filters list"
 
     sedfilter="s/.*| //;s/.*\/\///;s/\/.*$//"
 
-    export FZF_DEFAULT_OPTS="--reverse --ansi -m \
-          --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
-          --bind 'ctrl-f:execute-silent(echo {} | sed \"$sedfilter\" >> $filterlist)+execute(echo :refresh)+abort' \
-          --bind 'ctrl-e:execute(echo :edit)+abort' \
-          --preview='echo -e {} | sed \"s/\(.*\)| /\1\n/\" | head -c 300; echo -e \"\\n$helpmsg\"' \
-          --preview-window='down,20%,wrap'"
+    if [[ $1 == "closed-tabs" ]]; then
+        export FZF_DEFAULT_OPTS="--reverse --ansi -m \
+              --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
+              --preview='echo -e {} | sed \"s/\(.*\)| /\1\n/\" | head -c 300' \
+              --preview-window='down,20%,wrap'"
+    else
+        export FZF_DEFAULT_OPTS="--reverse --ansi -m \
+              --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
+              --bind 'ctrl-f:execute-silent(echo {} | sed \"$sedfilter\" >> $filterlist)+execute(echo :refresh)+abort' \
+              --bind 'ctrl-e:execute(echo :edit)+abort' \
+              --preview='echo -e {} | sed \"s/\(.*\)| /\1\n/\" | head -c 300; echo -e \"\\n$helpmsg\"' \
+              --preview-window='down,20%,wrap'"
+    fi
 
     # Filters with grep -v
     filters="$(sed ':a;N;$!ba;s/\n/|/g' $filterlist)"
 
-    output=$(echo -e "$(tac $1)" | grep -Ev "$filters" | fzf)
+    # Launch fzf
+    if [[ $1 == "closed-tabs" ]]; then
+        output=$(echo -e "$(tac $tmpfile)" | fzf)
+    else
+        output=$(echo -e "$(tac $tmpfile)" | grep -Ev "$filters" | fzf)
+    fi
+
     [[ -z $output ]] && exit
 
     # Refresh after ctrl + f
@@ -86,68 +97,53 @@ _fzf_menu (){
     echo "$urlslist" > "$2"
 }
 
-_create_humanread_table (){
-    # Custom table history-fzf plugin use
-    hname="HumanReadHistory"
-
-    # Create table is not exists
-    fields="url TEXT PRIMARY KEY, title TEXT NOT NULL, last_atime INTEGER NOT NULL, human_time TEXT NOT NULL"
-    sqlite3 $dbHistory "create table if note exists $hname ($fields);"
-}
-
-_rebuild_humanread_table (){
-    cname="CompletionHistory"
-    ccols="url, title, last_atime"
+_rebuild_CompletionHistory_table (){
+    tmpdata="/tmp/rebuild_CompletionHistory"
 
     # Store the content of CompletionHistory in a tmp file
-    sqlite3 $dbHistory "select $ccols from $cname" > /tmp/$cname
+    sqlite3 $dbHistory "SELECT last_atime FROM CompletionHistory" > $tmpdata
 
     # Counter to build a progress bar
-    ntotal=$(wc -l /tmp/$cname)
+    ntotal=$(wc -l $tmpfile)
     onepercent=$(echo $((${ntotal%% *} / 100)))
     i=0
     p=0
-    echo "Total of rows in $cname : ${ntotal%% *}"
+    echo "Total of rows in CompletionHistory : ${ntotal%% *}"
     echo "==================================="
     echo "$p % done"
 
-    while read line; do
+    while read atime; do
         # Progress view
         if (($i % ($onepercent + 1) == 0 )); then
             ((p++))
             [[ $p -le 100 ]] && echo "$p % done"
         fi
 
-        atime="${line##*|}"
-        txt="${line%|*}"
-        url="${txt%%|*}"
-        title="${txt#*|}"
-
+        # Translate atime in htime
         htime="$(date '+%Y %B %d %H:%M:%S' -d @$atime)"
 
-        hcols="url, title, last_atime, human_time"
-        values="'${url//\'/\'\'}', '${title//\'/\'\'}', $atime, '$htime'"
-            # ' must be replaced by '' in sqlite. The field values must be single quoted.
-
-        sqlite3 $dbHistory "insert or ignore into $hname ($hcols) values ($values);"
-            # If the value already exist, it will be ignored
+        # Update the humain_time col
+        sqlite3 $dbHistory "UPDATE CompletionHistory SET human_time = '$htime' WHERE last_atime = $atime"
 
         ((i++))
-    done < /tmp/$cname
+    done < $tmpdata
 }
 
 #==== MAIN ===============================================
 _main (){
-    if [[ $1 == "closed-tabs" ]]; then
+    mode="$1"
+    selectfile="$2"
+
+    if [[ $mode == "closed-tabs" ]]; then
         _build_closedtabs_list
-        _fzf_menu "$tmpfile" "$2"
-    elif [[ $1 == "create" ]]; then
-        _create_humanread_table
-    elif [[ $1 == "rebuild" ]]; then
-        _rebuild_humanread_table
+        _fzf_menu $mode "$selectfile"
+
+    elif [[ $mode == "rebuild" ]]; then
+        _rebuild_CompletionHistory_table
+
     else
-        _build_list
-        _fzf_menu "$tmpfile" "$2"
+        _build_history_list
+        _fzf_menu $mode "$selectfile"
     fi
 }
 

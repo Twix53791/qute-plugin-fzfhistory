@@ -1,5 +1,5 @@
---- toto.py	2024-03-21 15:54:31.858886929 +0100
-+++ history.py	2024-03-21 15:57:32.660792380 +0100
+--- /tmp/history.py	2024-03-24 13:38:37.247488754 +0100
++++ history.py	2024-03-24 13:42:26.455755394 +0100
 @@ -6,6 +6,7 @@
  
  import os
@@ -8,68 +8,21 @@
  import contextlib
  import pathlib
  from typing import cast, Mapping, MutableSequence, Optional
-@@ -141,6 +142,20 @@
+@@ -134,10 +135,11 @@
+ 
+     def __init__(self, database: sql.Database,
+                  parent: Optional[QObject] = None) -> None:
+-        super().__init__(database, "CompletionHistory", ['url', 'title', 'last_atime'],
++        super().__init__(database, "CompletionHistory", ['url', 'title', 'last_atime', 'human_time'],
+                          constraints={'url': 'PRIMARY KEY',
+                                       'title': 'NOT NULL',
+-                                      'last_atime': 'NOT NULL'},
++                                      'last_atime': 'NOT NULL',
++                                      'human_time': 'NOT NULL'},
                           parent=parent)
          self.create_index('CompletionHistoryAtimeIndex', 'last_atime')
  
-+class HumanReadHistory(sql.SqlTable):
-+
-+    """A copy of the CompletionHistory database storing the time in a human readable format."""
-+
-+    def __init__(self, database: sql.Database,
-+                 parent: Optional[QObject] = None) -> None:
-+        super().__init__(database, "HumanReadHistory", ['url', 'title', 'last_atime', 'human_time'],
-+                         constraints={'url': 'PRIMARY KEY',
-+                                      'title': 'NOT NULL',
-+                                      'last_atime': 'NOT NULL',
-+                                      'human_time': 'NOT NULL'},
-+                         parent=parent)
-+        self.create_index('HumanReadHistoryAtimeIndex', 'last_atime')
-+
- 
- class WebHistory(sql.SqlTable):
- 
-@@ -170,6 +185,7 @@
-         self._last_url = None
- 
-         self.completion = CompletionHistory(database, parent=self)
-+        self.humanread = HumanReadHistory(database, parent=self)
-         self.metainfo = CompletionMetaInfo(database, parent=self)
- 
-         try:
-@@ -292,6 +308,7 @@
- 
-         # Delete old entries
-         self.completion.delete_all()
-+        self.humanread.delete_all()
-         QApplication.processEvents()
- 
-         # Select the latest entry for each url
-@@ -321,6 +338,7 @@
-         QApplication.processEvents()
- 
-         self.completion.insert_batch(data, replace=True)
-+        self.humanread.insert_batch(data, replace=True)
-         QApplication.processEvents()
- 
-         self._progress.finish()
-@@ -356,6 +374,7 @@
-         with self._handle_sql_errors():
-             self.delete_all()
-             self.completion.delete_all()
-+            self.humanread.delete_all()
-         self.history_cleared.emit()
-         self._last_url = None
- 
-@@ -369,6 +388,7 @@
-         qtutils.ensure_valid(qurl)
-         self.delete('url', self._format_url(qurl))
-         self.completion.delete('url', self._format_completion_url(qurl))
-+        self.humanread.delete('url', self._format_completion_url(qurl))
-         if self._last_url == url:
-             self._last_url = None
-         self.url_cleared.emit(qurl)
-@@ -410,6 +430,7 @@
+@@ -410,6 +412,7 @@
              return
  
          atime = int(atime) if (atime is not None) else int(time.time())
@@ -77,17 +30,13 @@
  
          with self._handle_sql_errors():
              self.insert({'url': self._format_url(url),
-@@ -426,6 +447,13 @@
-                 'last_atime': atime
-             }, replace=True)
- 
-+            self.humanread.insert({
-+                'url': self._format_completion_url(url),
-+                'title': title,
+@@ -423,7 +426,8 @@
+             self.completion.insert({
+                 'url': self._format_completion_url(url),
+                 'title': title,
+-                'last_atime': atime
 +                'last_atime': atime,
 +                'human_time': htime
-+            }, replace=True)
-+
-     def _format_url(self, url):
-         return url.toString(QUrl.UrlFormattingOption.RemovePassword | QUrl.ComponentFormattingOption.FullyEncoded)
+             }, replace=True)
  
+     def _format_url(self, url):

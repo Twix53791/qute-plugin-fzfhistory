@@ -3,10 +3,13 @@
 # in your .bashrc/.zshrc file or here
 # export PATH="/home/archx/.config/qutebrowser/bin:$PATH"
 
+# By default, run the 'history' mode
+[[ -z $1 ]] && mode="history" || mode="$1"
+
 selectfile="/tmp/qute-plugin-fzfhistory-selection"
 [[ -s $selectfile ]] && echo -n "" > $selectfile
 
-kitty --name "qute-plugin-fzfhistory" -o font_family="Iosevka Term Extended" -o background_opacity=0.9 -e qute-plugin-fzfhistory $1 $selectfile
+kitty --name "qute-plugin-fzfhistory" -o font_family="Iosevka Term Extended" -o background_opacity=0.9 -e qute-plugin-fzfhistory $mode $selectfile
 
 if [[ -s $selectfile ]]; then
    while read url; do
