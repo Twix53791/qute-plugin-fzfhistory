@@ -34,3 +34,7 @@ In `config.py`:
 To apply the changes in the recording of the history (with now a human readable time format) to your past history, 'apply-fzfhistory-patch.sh' update the history.sqlite database. In case of any problem, to reset the CompletionHistory table:  
 `sqlite3 ~/.local/share/qutebrowser/history.sqlite 'ALTER TABLE CompletionHistory DROP human_time'`  
 Then run `./apply-fzfhistory-patch.sh --rebuild` OR `qute-plugin-fzfhistory rebuild`.
+
+## Demo
+
+![](https://github.com/Twix53791/qute-plugin-fzfhistory/blob/main/demo.gif)
