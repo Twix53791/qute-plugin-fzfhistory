@@ -18,7 +18,7 @@
 #
 #=========================================================
 
-[[ -n $EDITOR ]] && editor=$EDITOR || editor="nano"
+[[ -n $EDITOR ]] && editor=$EDITOR || editor="nvim"
 
 #==== FILES ==============================================
 
@@ -99,6 +99,13 @@ _fzf_menu (){
 
 _rebuild_CompletionHistory_table (){
     tmpdata="/tmp/rebuild_CompletionHistory"
+
+    # If the human_time column doesn't exist, create it
+    existingcols=$(sqlite3 "$dbHistory" 'PRAGMA table_info(CompletionHistory)' | cut -d'|' -f2)
+
+    if [[ $existingcols != *human_time* ]]; then
+        sqlite3 "$dbHistory" 'ALTER TABLE CompletionHistory ADD COLUMN human_time TEXT'
+    fi
 
     # Store the content of CompletionHistory in a tmp file
     sqlite3 $dbHistory "SELECT last_atime FROM CompletionHistory" > $tmpdata
