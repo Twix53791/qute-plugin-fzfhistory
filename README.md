@@ -3,6 +3,8 @@
 Open your history in a fzf menu  
 Open in fzf the history of the last 100 recently closed tabs
 
+Thanks to @toofar 
+
 ## Installation
 ### Dependencies
 The plugin need `sqlite3` installed. If you want to use another sqlite tool, edit the 'qute-plugin-fzfhistory' file and adapt the code...
