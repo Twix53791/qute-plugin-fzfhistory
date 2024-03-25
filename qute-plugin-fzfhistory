@@ -31,51 +31,76 @@ tmpfile="/tmp/qute-plugin-fzfhistory-tmp"
 # Colors displayed in fzf
 # 34/93/35 ; 34/93/92 ; 34/33/35 ; 94/33/92
 # 36/34/32 ; 92/34/36
-C1="34m";C2="93m";C3="35m"
+C1="\x1b\[34m";C2="\x1b\[93m";C3="\x1b\[35m"
+Chelp="\x1b[34m" # preview keybindings text
 
-table="CompletionHistory"
-fields_order="human_time,title,url" # Set here the fields order displayed in fzf
-sedpattern="s/^/\\\e[$C1/;s/|/\\\e[$C2  /;s/\(.*\)|/\1 \\\e[$C3| /"
 
 
 # Build the file source of the fzf menu in 'history' mode
 _build_history_list (){
-    sqlite3 $dbHistory "select $fields_order from $table order by last_atime asc" | sed "$sedpattern" > $tmpfile
+    table="CompletionHistory"
+
+    year="strftime('%Y', last_atime, 'unixepoch')"
+    # Don't remove the spaces below! Lenght of each month must be 9 characters
+    monthnames="January  February March    April    May      June     July     SeptemberOctober  November December "
+    month="substr('$monthnames', strftime('%m', last_atime, 'unixepoch') * 9 - 8,8)"
+    time="strftime('%d %H:%M:%S', last_atime, 'unixepoch')"
+
+    # Sed format the string with colors and formatted spacing
+    sedpattern="s/^/$C1/; s/|/ /; s/[[:space:]]*|/ /; s/|/$C2 /; s/\(.*\)|/\1$C3 | /"
+                # The structure of the sqlite3 pattern is the following:
+                #                      ^  %Y|monthname<spaces>|%d %H:%M:%S|title|url
+                # sed replaces | by: '$C1' ' '               ' '       '$C2 ' '$C3| '
+
+    # Filters with grep -v
+    filters="$(sed ':a;N;$!ba;s/\n/|/g' $filterlist)"
+
+    # Order the fields here
+    fields_order="$year,$month, $time,title,url"
+
+    # Alternative display, less complex, a bit faster (not so much)
+    # sedpattern="s/^/$C1/; s/|/$C2 /; s/\(.*\)|/\1$C3 | /"
+    # fields_order="datetime(last_atime, 'unixepoch'),title,url"
+
+    sqlite3 $dbHistory "SELECT $fields_order FROM $table" | sed "$sedpattern" | grep -Ev "$filters" | fzf
 }
 
 # Build the file source of the fzf menu in 'close-tabs' mode
 _build_closedtabs_list (){
-    sed "$sedpattern" $closedtabs > $tmpfile
+    sedpattern="s/^/$C1/;s/|/$C2 /;s/\(.*\)|/\1$C3 | /"
+
+    sed "$sedpattern" $closedtabs | fzf
 }
 
 # Fzf menu. $1: mode ; $2: select file to send the picked urls to qutebrowser
 _fzf_menu (){
     helpmsg="ctrl-f: hide the url domain (add a new filter) ;  ctrl-e: edit filters list"
 
-    sedfilter="s/.*| //;s/.*\/\///;s/\/.*$//"
+    # Get the url, then the domain from the url
+    sedgetdomain="s/.*| //; s/.*\/\///; s/\/.*$//"
+
+    # Format the preview text
+    sedpreview="s/^/$C2/; s/\(.*\)| /\1\n$C3/"
 
     if [[ $1 == "closed-tabs" ]]; then
         export FZF_DEFAULT_OPTS="--reverse --ansi -m \
               --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
-              --preview='echo -e {} | sed \"s/\(.*\)| /\1\n/\" | head -c 300' \
+              --preview='echo -e {} | sed \"$sedpreview\" | head -c 300' \
               --preview-window='down,20%,wrap'"
     else
         export FZF_DEFAULT_OPTS="--reverse --ansi -m \
               --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
-              --bind 'ctrl-f:execute-silent(echo {} | sed \"$sedfilter\" >> $filterlist)+execute(echo :refresh)+abort' \
+              --bind 'ctrl-f:execute-silent(echo {} | sed \"$sedgetdomain\" >> $filterlist)+execute(echo :refresh)+abort' \
               --bind 'ctrl-e:execute(echo :edit)+abort' \
-              --preview='echo -e {} | sed \"s/\(.*\)| /\1\n/\" | head -c 300; echo -e \"\\n$helpmsg\"' \
+              --preview='echo -e {} | sed \"$sedpreview\" | head -c 300; echo -e \"\\n$Chelp$helpmsg\"' \
               --preview-window='down,20%,wrap'"
     fi
 
-    # Filters with grep -v
-    filters="$(sed ':a;N;$!ba;s/\n/|/g' $filterlist)"
-
     # Launch fzf
     if [[ $1 == "closed-tabs" ]]; then
-        output=$(echo -e "$(tac $tmpfile)" | fzf)
+        output=$(_build_closedtabs_list)
     else
-        output=$(echo -e "$(tac $tmpfile)" | grep -Ev "$filters" | fzf)
+        output=$(_build_history_list)
     fi
 
     [[ -z $output ]] && exit
@@ -97,59 +122,15 @@ _fzf_menu (){
     echo "$urlslist" > "$2"
 }
 
-_rebuild_CompletionHistory_table (){
-    tmpdata="/tmp/rebuild_CompletionHistory"
-
-    # If the human_time column doesn't exist, create it
-    existingcols=$(sqlite3 "$dbHistory" 'PRAGMA table_info(CompletionHistory)' | cut -d'|' -f2)
-
-    if [[ $existingcols != *human_time* ]]; then
-        sqlite3 "$dbHistory" 'ALTER TABLE CompletionHistory ADD COLUMN human_time TEXT'
-    fi
-
-    # Store the content of CompletionHistory in a tmp file
-    sqlite3 $dbHistory "SELECT last_atime FROM CompletionHistory" > $tmpdata
-
-    # Counter to build a progress bar
-    ntotal=$(wc -l $tmpfile)
-    onepercent=$(echo $((${ntotal%% *} / 100)))
-    i=0
-    p=0
-    echo "Total of rows in CompletionHistory : ${ntotal%% *}"
-    echo "==================================="
-    echo "$p % done"
-
-    while read atime; do
-        # Progress view
-        if (($i % ($onepercent + 1) == 0 )); then
-            ((p++))
-            [[ $p -le 100 ]] && echo "$p % done"
-        fi
-
-        # Translate atime in htime
-        htime="$(date '+%Y %B %d %H:%M:%S' -d @$atime)"
-
-        # Update the humain_time col
-        sqlite3 $dbHistory "UPDATE CompletionHistory SET human_time = '$htime' WHERE last_atime = $atime"
-
-        ((i++))
-    done < $tmpdata
-}
-
 #==== MAIN ===============================================
 _main (){
     mode="$1"
     selectfile="$2"
 
     if [[ $mode == "closed-tabs" ]]; then
-        _build_closedtabs_list
         _fzf_menu $mode "$selectfile"
 
-    elif [[ $mode == "rebuild" ]]; then
-        _rebuild_CompletionHistory_table
-
     else
-        _build_history_list
         _fzf_menu $mode "$selectfile"
     fi
 }
