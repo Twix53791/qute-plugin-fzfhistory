@@ -25,7 +25,7 @@
 dbHistory="$QUTE_DATA_DIR/history.sqlite"
 filterlist="$QUTE_DATA_DIR/history-filters"
 closedtabs="$QUTE_DATA_DIR/closed-tabs-history"
-tmpfile="/tmp/qute-plugin-fzfhistory-tmp"
+tmpfile="/tmp/qute-plugins/qute-plugin-fzfhistory-tmp"
 
 #==== FUNCTIONS ==========================================
 # Colors displayed in fzf
@@ -42,9 +42,9 @@ _build_history_list (){
 
     year="strftime('%Y', last_atime, 'unixepoch')"
     # Don't remove the spaces below! Lenght of each month must be 9 characters
-    monthnames="January  February March    April    May      June     July     SeptemberOctober  November December "
+    # monthnames="January  February March    April    May      June     July     SeptemberOctober  November December "
     # French
-    # monthnames="Janvier  Fevrier  Mars     Avril    Mai      Juin     Juillet  SeptembreOctobre  Novembre Decembre"
+    monthnames="Janvier  Fevrier  Mars     Avril    Mai      Juin     Juillet  SeptembreOctobre  Novembre Decembre"
     month="substr('$monthnames', strftime('%m', last_atime, 'unixepoch') * 9 - 8,9)"
     time="strftime('%d %H:%M:%S', last_atime, 'unixepoch')"
 
@@ -87,11 +87,13 @@ _fzf_menu (){
     if [[ $1 == "closed-tabs" ]]; then
         export FZF_DEFAULT_OPTS="--reverse --ansi -m \
               --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
+              --bind 'alt-h:abort' \
               --preview='echo -e {} | sed \"$sedpreview\" | head -c 300' \
               --preview-window='down,20%,wrap'"
     else
         export FZF_DEFAULT_OPTS="--reverse --ansi -m \
               --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
+              --bind 'alt-h:abort' \
               --bind 'ctrl-f:execute-silent(echo {} | sed \"$sedgetdomain\" >> $filterlist)+execute(echo :refresh)+abort' \
               --bind 'ctrl-e:execute(echo :edit)+abort' \
               --preview='echo -e {} | sed \"$sedpreview\" | head -c 300; echo -e \"\\n$Chelp$helpmsg\"' \
