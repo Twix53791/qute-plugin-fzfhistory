@@ -43,7 +43,9 @@ _build_history_list (){
     year="strftime('%Y', last_atime, 'unixepoch')"
     # Don't remove the spaces below! Lenght of each month must be 9 characters
     monthnames="January  February March    April    May      June     July     SeptemberOctober  November December "
-    month="substr('$monthnames', strftime('%m', last_atime, 'unixepoch') * 9 - 8,8)"
+    # French
+    # monthnames="Janvier  Fevrier  Mars     Avril    Mai      Juin     Juillet  SeptembreOctobre  Novembre Decembre"
+    month="substr('$monthnames', strftime('%m', last_atime, 'unixepoch') * 9 - 8,9)"
     time="strftime('%d %H:%M:%S', last_atime, 'unixepoch')"
 
     # Sed format the string with colors and formatted spacing
