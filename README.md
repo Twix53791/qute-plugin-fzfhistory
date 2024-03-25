@@ -3,7 +3,7 @@
 Open your history in a fzf menu  
 Open in fzf the history of the last 100 recently closed tabs
 
-Thanks to @toofar 
+Thanks to [this discussion](https://github.com/qutebrowser/qutebrowser/issues/8141) for the tip about displaying sfrtime directly with sqlite3.
 
 ## Installation
 ### Dependencies
