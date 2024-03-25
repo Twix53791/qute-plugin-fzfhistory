@@ -26,6 +26,11 @@ It stores the last 100 closed tabs in the file 'closed-tabs-history' in the qute
 ```
 ./apply-closed-tabs-patch.sh
 ```
+OR manually
+```
+patch -u /patch/to/qutebrowser/mainwindow/tabbedbrowser.py -i tabbedbrowser.patch
+```
+
 
 ## Use
 In `config.py`:
