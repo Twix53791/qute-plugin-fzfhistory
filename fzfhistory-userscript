@@ -8,7 +8,10 @@
 # By default, run the 'history' mode
 [[ -z $1 ]] && mode="history" || mode="$1"
 
-selectfile="/tmp/qute-plugins/qute-plugin-fzfhistory-selection"
+plgdir="/tmp/qute-plugins"
+[[ ! -d $plgdir ]] && mkdir "$plgdir"
+
+selectfile="$plgdir/qute-plugin-fzfhistory-selection"
 [[ -s $selectfile ]] && echo -n "" > $selectfile
 
 term="kitty"
