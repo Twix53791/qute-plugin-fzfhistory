@@ -18,7 +18,7 @@
 #
 #=========================================================
 
-[[ -n $EDITOR ]] && editor=$EDITOR || editor="nvim"
+[[ -n $EDITOR ]] && editor=$EDITOR || editor="nano"
 
 #==== FILES ==============================================
 
@@ -87,13 +87,11 @@ _fzf_menu (){
     if [[ $1 == "closed-tabs" ]]; then
         export FZF_DEFAULT_OPTS="--reverse --ansi -m \
               --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
-              --bind 'alt-h:abort' \
               --preview='echo -e {} | sed \"$sedpreview\" | head -c 300' \
               --preview-window='down,20%,wrap'"
     else
         export FZF_DEFAULT_OPTS="--reverse --ansi -m \
               --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
-              --bind 'alt-h:abort' \
               --bind 'ctrl-f:execute-silent(echo {} | sed \"$sedgetdomain\" >> $filterlist)+execute(echo :refresh)+abort' \
               --bind 'ctrl-e:execute(echo :edit)+abort' \
               --preview='echo -e {} | sed \"$sedpreview\" | head -c 300; echo -e \"\\n$Chelp$helpmsg\"' \
