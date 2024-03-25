@@ -18,7 +18,7 @@
 #
 #=========================================================
 
-[[ -n $EDITOR ]] && editor=$EDITOR || editor="nano"
+[[ -n $EDITOR ]] && editor=$EDITOR || editor="nvim"
 
 #==== FILES ==============================================
 
@@ -62,7 +62,7 @@ _build_history_list (){
     # sedpattern="s/^/$C1/; s/|/$C2 /; s/\(.*\)|/\1$C3 | /"
     # fields_order="datetime(last_atime, 'unixepoch'),title,url"
 
-    sqlite3 $dbHistory "SELECT $fields_order FROM $table" | sed "$sedpattern" | grep -Ev "$filters" | fzf
+    sqlite3 $dbHistory "SELECT $fields_order FROM $table ORDER BY last_atime DESC" | sed "$sedpattern" | grep -Ev "$filters" | fzf
 }
 
 # Build the file source of the fzf menu in 'close-tabs' mode
