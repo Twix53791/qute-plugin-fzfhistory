@@ -21,16 +21,11 @@ cp qute-plugin-fzfhistory ~/config/qutebrowser/bin/
 
 #### To use the 'closed-tabs' extension
 This extension can be launched with `spawn -u fzfhistory-userscript closed-tabs`.
-It stores the last 100 closed tabs in the file 'closed-tabs-history' in the qutebrowser datadir. The patch modifies the file 'mainwindow/tabbedbrowser.py' in qutebrowser source code.
+It stores the last 100 closed tabs in the file 'closed-tabs-history' in the qutebrowser datadir. The patch modifies the file 'mainwindow/tabbedbrowser.py' in qutebrowser source code. You can find the location of qutebrowser files with `qutebrowser -V`.
 
-```
-./apply-closed-tabs-patch.sh
-```
-OR manually
 ```
 patch -u /patch/to/qutebrowser/mainwindow/tabbedbrowser.py -i tabbedbrowser.patch
 ```
-
 
 ## Use
 In `config.py`:
